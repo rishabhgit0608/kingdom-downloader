@@ -35,45 +35,77 @@ program
 
       const downloadSpinner = ora('Downloading...').start();
 
-      // Get format: highest quality with both video and audio
-      // YouTube usually limits "combined" streams to 720p. 
-      // Higher qualities require downloading video/audio separately and merging (complex for a simple Node POC without ffmpeg dependency).
-      const format = ytdl.chooseFormat(info.formats, { quality: 'highest', filter: 'audioandvideo' });
+      // --- KINGDOM SELECTOR LOGIC ---
+      // Priority: 720p (itag 22) -> 360p (itag 18)
+      // This ensures a single file with both video and audio (Progressive).
+      const preferredItags = [22, 18];
+      let format = info.formats.find(f => f.itag === 22);
+      
+      if (!format) {
+        format = info.formats.find(f => f.itag === 18);
+        if (format) {
+            spinner.warn('720p not available. Falling back to 360p.');
+        }
+      }
 
       if (!format) {
-        downloadSpinner.fail('No suitable format found!');
+        // Ultimate fallback: any container with audio+video
+        format = ytdl.chooseFormat(info.formats, { filter: 'audioandvideo' });
+      }
+
+      if (!format) {
+        spinner.fail('No suitable video+audio format found!');
         return;
       }
 
-      const videoStream = ytdl.downloadFromInfo(info, { format: format });
-      const fileStream = fs.createWriteStream(outputPath);
+      // --- RETRY & DOWNLOAD LOOP ---
+      const downloadWithRetry = (attempt = 1) => {
+          return new Promise((resolve, reject) => {
+            const downloadSpinner = ora(attempt > 1 ? `Retry attempt ${attempt}...` : 'Downloading...').start();
+            
+            const videoStream = ytdl.downloadFromInfo(info, { format: format });
+            const fileStream = fs.createWriteStream(outputPath);
+            let starttime;
 
-      let starttime;
-      videoStream.pipe(fileStream);
+            videoStream.pipe(fileStream);
 
-      videoStream.once('response', () => {
-        starttime = Date.now();
-      });
+            videoStream.once('response', () => {
+                starttime = Date.now();
+            });
 
-      videoStream.on('progress', (chunkLength, downloaded, total) => {
-        const percent = downloaded / total;
-        const downloadedMinutes = (Date.now() - starttime) / 1000 / 60;
-        const estimatedDownloadTime = (downloadedMinutes / percent) - downloadedMinutes;
-        
-        downloadSpinner.text = `Downloading: ${(percent * 100).toFixed(2)}% | ${(downloaded / 1024 / 1024).toFixed(2)}MB downloaded`;
-      });
+            videoStream.on('progress', (chunkLength, downloaded, total) => {
+                const percent = downloaded / total;
+                const downloadedMinutes = (Date.now() - starttime) / 1000 / 60;
+                // Avoid infinity on start
+                const estimatedDownloadTime = percent > 0 ? (downloadedMinutes / percent) - downloadedMinutes : 0;
+                
+                downloadSpinner.text = `Downloading: ${(percent * 100).toFixed(1)}% | ${(downloaded / 1024 / 1024).toFixed(1)}MB`;
+            });
 
-      videoStream.on('end', () => {
-        downloadSpinner.succeed(`Saved to: ${outputPath}`);
-      });
+            videoStream.on('end', () => {
+                downloadSpinner.succeed(`Saved to: ${outputPath}`);
+                resolve();
+            });
 
-      videoStream.on('error', (err) => {
-        downloadSpinner.fail(`Download failed: ${err.message}`);
-        fs.unlink(outputPath, () => {}); // Delete partial file
-      });
+            videoStream.on('error', (err) => {
+                fileStream.close();
+                downloadSpinner.fail(`Error: ${err.message}`);
+                
+                if (attempt < 3) {
+                    setTimeout(() => {
+                        resolve(downloadWithRetry(attempt + 1));
+                    }, 2000);
+                } else {
+                    reject(err);
+                }
+            });
+          });
+      };
+
+      await downloadWithRetry();
 
     } catch (error) {
-      spinner.fail(`Error: ${error.message}`);
+      spinner.fail(`Critical Error: ${error.message}`);
     }
   });
 
