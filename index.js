@@ -50,9 +50,8 @@ program
       const baseArgs = [
           '--no-warnings',
           '--no-check-certificates',
-          '--user-agent', USER_AGENT,
           '--prefer-free-formats',
-          '--js-runtimes', 'node' // Use system Node.js for de-obfuscation
+          '--extractor-args', 'youtube:player_client=android', // Use Android API to bypass Web/Bot checks
       ];
 
       if (options.cookies) {
