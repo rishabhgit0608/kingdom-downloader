@@ -11,6 +11,6 @@
     "commander": "^11.0.0",
     "ora": "^7.0.1",
     "sanitize-filename": "^1.6.3",
-    "yt-dlp-exec": "^2.0.0" 
+    "yt-dlp-wrap": "^2.3.12"
   }
 }
