@@ -19,7 +19,18 @@ program
         return;
       }
 
-      const info = await ytdl.getInfo(url);
+      // Use a robust User-Agent (Chrome on Windows) to avoid "Sign in to confirm you're not a bot"
+      const agentOptions = {
+          requestOptions: {
+              headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                  'Accept-Language': 'en-US,en;q=0.9',
+              }
+          }
+      };
+
+      const info = await ytdl.getInfo(url, agentOptions);
       const title = info.videoDetails.title;
       const cleanTitle = sanitize(title);
       const outputDir = options.output;
