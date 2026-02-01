@@ -27,11 +27,15 @@ async function ensureBinary() {
     }
 }
 
+// Robust User Agent
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
+
 program
   .name('kingdom-dl')
   .description('Robust YouTube Downloader (yt-dlp wrapper)')
   .argument('<url>', 'YouTube Video URL')
   .option('-o, --output <dir>', 'Output directory', '.')
+  .option('--cookies <file>', 'Path to cookies.txt (Netscape format)')
   .action(async (url, options) => {
     
     try {
@@ -42,8 +46,27 @@ program
           fs.mkdirSync(options.output, { recursive: true });
       }
 
+      // Base arguments for evasion
+      const baseArgs = [
+          '--no-warnings',
+          '--no-check-certificates',
+          '--user-agent', USER_AGENT,
+          '--prefer-free-formats',
+          '--js-runtimes', 'node' // Use system Node.js for de-obfuscation
+      ];
+
+      if (options.cookies) {
+          baseArgs.push('--cookies', options.cookies);
+      }
+
       // 1. Metadata
-      const metadata = await ytDlp.getVideoInfo(url);
+      // Construct args for metadata fetch
+      const metaArgs = [url, '--dump-json', ...baseArgs];
+      
+      // execPromise is internal to yt-dlp-wrap, we use exec directly with stdout capture
+      const metadataJson = await ytDlp.execPromise(metaArgs);
+      const metadata = JSON.parse(metadataJson);
+      
       const title = metadata.title;
       spinner.succeed(`Found: ${title}`);
 
@@ -51,13 +74,14 @@ program
       const downloadSpinner = ora('Downloading...').start();
       const outputTemplate = path.join(options.output, '%(title)s.%(ext)s');
 
-      // Execute download with event emitter for progress
-      let ytDlpEventEmitter = ytDlp.exec([
+      const downArgs = [
           url,
-          '-f', 'best[ext=mp4]/best', // Progressive MP4 priority
+          '-f', 'best[ext=mp4]/best', 
           '-o', outputTemplate,
-          '--no-warnings'
-      ]);
+          ...baseArgs
+      ];
+
+      let ytDlpEventEmitter = ytDlp.exec(downArgs);
 
       ytDlpEventEmitter.on('progress', (progress) => {
           downloadSpinner.text = `Downloading: ${progress.percent}% | ${progress.currentSpeed} | ETA: ${progress.eta}`;
