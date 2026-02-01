@@ -1,0 +1,16 @@
+{
+  "name": "kingdom-downloader",
+  "version": "1.0.0",
+  "description": "A focused, custom YouTube downloader POC.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@distube/ytdl-core": "^4.13.5",
+    "commander": "^11.0.0",
+    "ora": "^7.0.1",
+    "sanitize-filename": "^1.6.3"
+  }
+}
